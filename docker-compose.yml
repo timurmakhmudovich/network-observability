@@ -1,0 +1,149 @@
+version: '3'
+services:
+  sfacct:
+    image: pmacct/sfacctd:latest
+    restart: always
+    container_name: sfacct
+    ports:
+      - "6343:6343/udp"
+    volumes:
+      - type: bind
+        source: ./sfacctd.conf
+        target: /etc/pmacct/sfacctd.conf
+    networks:
+      - sample-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    restart: always
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sample-net
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    restart: always
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_INTERNAL://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: nc -z localhost 9092 || exit -1
+      start_period: 5s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    networks:
+      - sample-net
+
+  clickhouse-server:
+    image: clickhouse/clickhouse-server:latest
+    restart: always
+    container_name: clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - db:/var/lib/clickhouse
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      start_period: 5s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    networks:
+      - sample-net
+
+  clickhouse-client:
+    image: clickhouse/clickhouse-client:latest
+    restart: always
+    container_name: clickhouse-client
+    depends_on: 
+      clickhouse-server:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./schema.sql
+        target: /schema.sql
+    entrypoint: [ '/bin/bash', '-c' ]
+    command: |
+      "
+      clickhouse-client --host clickhouse-server --queries-file /schema.sql
+      sleep infinity
+      "
+    networks:
+      - sample-net
+
+  redis:
+    image: redis:latest
+    restart: always
+    command: redis-server
+    container_name: redis
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      start_period: 5s
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    networks:
+      - sample-net
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    container_name: grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana:/var/lib/grafana
+    networks:
+      - sample-net
+
+  ipam-collector:
+    restart: always
+    build: './ipam-collector'
+    container_name: ipam-collector
+    environment:
+      - NETBOX_URL=${NETBOX_URL}
+      - NETBOX_TOKEN=${NETBOX_TOKEN}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sample-net
+    
+  enricher:
+    restart: always
+    build: './enricher'
+    container_name: enricher
+    depends_on:
+      kafka:
+        condition: service_healthy
+      ipam-collector:
+        condition: service_started
+      clickhouse-client:
+        condition: service_started    
+    networks:
+      - sample-net
+
+volumes:
+  db:
+  grafana:
+networks:
+  sample-net: 
