@@ -1,4 +1,4 @@
-# Network observability example
+# sFlow data enrichment example
 
 Basic implementation of sFlow data enrichment.
 
