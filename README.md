@@ -9,4 +9,4 @@ Implementation of the following scheme with Docker Compose:
 
 Netbox deployment in containers: https://github.com/netbox-community/netbox-docker
 
-More details in the article:
+More details in the article: https://www.linkedin.com/pulse/sflow-data-enrichment-timur-iskenderov-yod8e
