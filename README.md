@@ -1,8 +1,7 @@
 # sFlow data enrichment example
 
 Basic implementation of sFlow data enrichment.
-
-*! This is PoC and it is not intended for production !*
+Made for testing purposes.
 
 Implementation of the following scheme with Docker Compose:
 
